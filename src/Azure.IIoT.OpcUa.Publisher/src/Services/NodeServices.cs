@@ -14,6 +14,8 @@ namespace Azure.IIoT.OpcUa.Publisher.Services
     using Furly.Extensions.Serializers;
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Options;
+    using BrowseDirection = Models.BrowseDirection;
+    using NodeClass = Models.NodeClass;
     using Opc.Ua;
     using Opc.Ua.Extensions;
     using System;
@@ -24,8 +26,6 @@ namespace Azure.IIoT.OpcUa.Publisher.Services
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
-    using BrowseDirection = Models.BrowseDirection;
-    using NodeClass = Models.NodeClass;
 
     /// <summary>
     /// This class provides access to a servers address space providing node
@@ -898,7 +898,7 @@ namespace Azure.IIoT.OpcUa.Publisher.Services
                 throw new ArgumentException("Bad node id or browse path missing", nameof(request));
             }
             using var trace = _activitySource.StartActivity("ValueWrite");
-            async Task<ValueWriteResponseModel> ExecuteWriteOperationAsync(ServiceCallContext context)
+            return await _client.ExecuteAsync(endpoint, async context =>
             {
                 var writeNode = request.NodeId.ToNodeId(context.Session.MessageContext);
                 if (request.BrowsePath?.Count > 0)
@@ -935,6 +935,7 @@ namespace Azure.IIoT.OpcUa.Publisher.Services
                         IndexRange = request.IndexRange
                     }
                 };
+                var result = new ValueWriteResponseModel();
                 var response = await context.Session.Services.WriteAsync(
                     request.Header.ToRequestHeader(_timeProvider), nodesToWrite,
                     context.Ct).ConfigureAwait(false);
@@ -944,10 +945,7 @@ namespace Azure.IIoT.OpcUa.Publisher.Services
                 {
                     ErrorInfo = values.ErrorInfo ?? values[0].ErrorInfo
                 };
-            }
-
-            // Usage within the original method or context
-            return await _client.ExecuteAsync(endpoint, ExecuteWriteOperationAsync, request.Header, new CancellationToken()).ConfigureAwait(false);
+            }, request.Header, ct).ConfigureAwait(false);
         }
 
         /// <inheritdoc/>
